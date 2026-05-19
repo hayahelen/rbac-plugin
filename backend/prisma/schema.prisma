@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoleType {
+  SUPER_ADMIN
+  USER
+}
+
+
+model User {
+  id          String   @id @default(uuid())
+  firstName   String?
+  lastName    String?
+  email       String   @unique
+  roleType    RoleType @default(USER)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  clerkUserId String?  @unique
+  deletedAt   DateTime?
+
+  ownedOrganizations Organization[]
+  memberships Membership[]
+
+  @@map("users")
+}
+
+
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+
+  ownerId   String?
+
+  isActive  Boolean  @default(true)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+  owner User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@map("organizations")
+}
+
+
+model Membership {
+  id             String   @id @default(uuid())
+
+  userId         String
+  organizationId String
+
+  roleId String
+  role   Role @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+
+  isActive       Boolean  @default(true)
+  deletedAt      DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+
+  @@map("memberships")
+}
+
+
+
+
+
+
+model Role {
+  id             String   @id @default(uuid())
+
+  name           String
+  description    String?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  memberships    Membership[]
+  rolePermissions RolePermission[]
+
+  @@unique([organizationId, name])
+}
+
+
+model Permission {
+  id String @id @default(uuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  key         String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  rolePermissions RolePermission[]
+
+  @@unique([organizationId, key])
+}
+
+
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+}
