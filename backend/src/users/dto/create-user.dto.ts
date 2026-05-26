@@ -26,6 +26,5 @@ export class CreateUserDto {
   lastName?: string;
 
   @IsUUID()
-  @IsOptional()
-  organizationId?: string;
+  roleId: string;
 }
