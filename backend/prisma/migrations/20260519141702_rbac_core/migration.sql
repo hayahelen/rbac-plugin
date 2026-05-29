@@ -1,11 +1,11 @@
 /*
   Warnings:
 
-  - You are about to drop the column `roleName` on the `memberships` table. All the data in the column will be lost.
+  - You are about to drop the column `roleName` on the `memberships` table. The data in this column will be preserved until role backfill completes.
 
 */
 -- AlterTable
-ALTER TABLE "memberships" DROP COLUMN "roleName",
+ALTER TABLE "memberships"
 ADD COLUMN     "roleId" TEXT;
 
 -- CreateTable
@@ -20,6 +20,27 @@ CREATE TABLE "Role" (
 
     CONSTRAINT "Role_pkey" PRIMARY KEY ("id")
 );
+
+-- Create roles for existing memberships using the old roleName values.
+INSERT INTO "Role" ("id", "name", "organizationId", "createdAt", "updatedAt")
+SELECT md5("organizationId" || '|' || "roleName"),
+       "roleName",
+       "organizationId",
+       CURRENT_TIMESTAMP,
+       CURRENT_TIMESTAMP
+FROM "memberships"
+WHERE "roleName" IS NOT NULL
+GROUP BY "organizationId", "roleName";
+
+-- Populate memberships.roleId from the created roles.
+UPDATE "memberships"
+SET "roleId" = r."id"
+FROM "Role" r
+WHERE "memberships"."organizationId" = r."organizationId"
+  AND "memberships"."roleName" = r."name";
+
+-- Remove the old roleName column after backfill.
+ALTER TABLE "memberships" DROP COLUMN "roleName";
 
 -- CreateTable
 CREATE TABLE "Permission" (

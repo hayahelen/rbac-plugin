@@ -1,8 +1,9 @@
 /*
   Warnings:
 
-  - You are about to drop the `Permission` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `Role` table. If the table is not empty, all the data it contains will be lost.
+  - The existing `Permission` and `Role` tables will be preserved as `Permission_old` and `Role_old`.
+  - Data will be copied into the new `permissions` and `roles` tables, preserving existing IDs.
+  - Existing `memberships.roleId` and `role_permissions` rows continue to point to preserved IDs.
 
 */
 -- DropForeignKey
@@ -20,11 +21,9 @@ ALTER TABLE "role_permissions" DROP CONSTRAINT "role_permissions_permissionId_fk
 -- DropForeignKey
 ALTER TABLE "role_permissions" DROP CONSTRAINT "role_permissions_roleId_fkey";
 
--- DropTable
-DROP TABLE "Permission";
-
--- DropTable
-DROP TABLE "Role";
+-- Rename old tables instead of dropping them to preserve existing rows and IDs.
+ALTER TABLE "Permission" RENAME TO "Permission_old";
+ALTER TABLE "Role" RENAME TO "Role_old";
 
 -- CreateTable
 CREATE TABLE "roles" (
@@ -54,6 +53,33 @@ CREATE TABLE "permissions" (
 
     CONSTRAINT "permissions_pkey" PRIMARY KEY ("id")
 );
+
+-- Copy existing Role rows into the new `roles` table, preserving IDs.
+INSERT INTO "roles" ("id", "name", "description", "organizationId", "isActive", "createdAt", "updatedAt", "deletedAt")
+SELECT "id", "name", "description", "organizationId", true, "createdAt", "updatedAt", "deletedAt"
+FROM "Role_old";
+
+-- Copy existing Permission rows into the new `permissions` table, deriving resource/action from the old key.
+INSERT INTO "permissions" ("id", "organizationId", "resource", "action", "key", "description", "isActive", "createdAt", "updatedAt", "deletedAt")
+SELECT "id",
+       "organizationId",
+       CASE
+         WHEN position('.' IN "key") > 0 THEN split_part("key", '.', 1)
+         ELSE coalesce("key", 'unknown')
+       END,
+       CASE
+         WHEN position('.' IN "key") > 0 THEN split_part("key", '.', 2)
+         ELSE ''
+       END,
+       "key",
+       "description",
+       true,
+       "createdAt",
+       "updatedAt",
+       "deletedAt"
+FROM "Permission_old";
+
+-- Existing memberships.roleId and role_permissions.* already reference preserved IDs, so no row-level rewiring is needed.
 
 -- CreateIndex
 CREATE UNIQUE INDEX "roles_organizationId_name_key" ON "roles"("organizationId", "name");

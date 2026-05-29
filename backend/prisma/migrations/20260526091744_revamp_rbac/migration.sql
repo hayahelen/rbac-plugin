@@ -1,10 +1,10 @@
 /*
   Warnings:
 
-  - You are about to drop the column `key` on the `Permission` table. All the data in the column will be lost.
-  - You are about to drop the `RolePermission` table. If the table is not empty, all the data it contains will be lost.
-  - A unique constraint covering the columns `[organizationId,resource]` on the table `Permission` will be added. If there are existing duplicate values, this will fail.
-  - Added the required column `resource` to the `Permission` table without a default value. This is not possible if the table is not empty.
+  - You are about to drop the column `key` on the `Permission` table. All the data in the column will be lost after this migration step.
+  - You are about to drop the `RolePermission` table. Existing assignments will be migrated into `role_permissions` before the drop.
+  - A unique constraint covering the columns `[organizationId,resource]` on the table `Permission` will be added. If there are existing duplicate values after backfill, this will fail.
+  - Added the required column `resource` to the `Permission` table as NULLABLE first, then backfilled before setting NOT NULL.
 
 */
 -- DropForeignKey
@@ -20,19 +20,30 @@ ALTER TABLE "RolePermission" DROP CONSTRAINT "RolePermission_roleId_fkey";
 DROP INDEX "Permission_organizationId_key_key";
 
 -- AlterTable
-ALTER TABLE "Permission" DROP COLUMN "key",
+ALTER TABLE "Permission"
+ADD COLUMN     "resource" TEXT,
 ADD COLUMN     "canCreate" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "canDelete" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "canRead" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "canUpdate" BOOLEAN NOT NULL DEFAULT false,
-ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true,
-ADD COLUMN     "resource" TEXT NOT NULL;
+ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true;
 
 -- AlterTable
 ALTER TABLE "Role" ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true;
 
--- DropTable
-DROP TABLE "RolePermission";
+-- Backfill resource for existing Permission rows using the old key.
+UPDATE "Permission"
+SET "resource" = CASE
+  WHEN position('.' IN "key") > 0 THEN split_part("key", '.', 1)
+  ELSE coalesce("key", 'unknown')
+END
+WHERE "resource" IS NULL;
+
+-- Enforce non-null resource once backfill is complete.
+ALTER TABLE "Permission" ALTER COLUMN "resource" SET NOT NULL;
+
+-- Drop the old key column once resource is populated.
+ALTER TABLE "Permission" DROP COLUMN "key";
 
 -- CreateTable
 CREATE TABLE "role_permissions" (
@@ -43,6 +54,14 @@ CREATE TABLE "role_permissions" (
 
     CONSTRAINT "role_permissions_pkey" PRIMARY KEY ("id")
 );
+
+-- Migrate existing role assignments from old RolePermission.
+INSERT INTO "role_permissions" ("id", "roleId", "permissionId", "createdAt")
+SELECT md5("roleId" || '|' || "permissionId" || '|' || COALESCE("createdAt"::text, '')),
+       "roleId",
+       "permissionId",
+       "createdAt"
+FROM "RolePermission";
 
 -- CreateIndex
 CREATE UNIQUE INDEX "role_permissions_roleId_permissionId_key" ON "role_permissions"("roleId", "permissionId");
@@ -58,3 +77,6 @@ ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_roleId_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_permissionId_fkey" FOREIGN KEY ("permissionId") REFERENCES "Permission"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- DropTable
+DROP TABLE "RolePermission";
