@@ -8,5 +8,5 @@ export class CreateMembershipDto {
   organizationId: string;
 
   @IsString()
-  roleName: string;
+  roleId: string;
 }

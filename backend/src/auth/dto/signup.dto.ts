@@ -1,4 +1,4 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsString } from 'class-validator';
 
 export class SignupDto {
   @IsString()
@@ -7,7 +7,7 @@ export class SignupDto {
   @IsString()
   lastName: string;
 
-  @IsEmail()
+  @IsString()
   email: string;
 
   @IsString()
@@ -15,7 +15,4 @@ export class SignupDto {
 
   @IsString()
   organizationSlug: string;
-
-  @IsString()
-  clerkUserId: string;
 }

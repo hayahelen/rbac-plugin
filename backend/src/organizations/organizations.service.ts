@@ -17,17 +17,42 @@ export class OrganizationsService {
     });
   }
 
-  findAll() {
+  findAll(organizationId: string, roleType?: string) {
+    if (roleType === 'SUPER_ADMIN') {
+      return this.prisma.organization.findMany({
+        where: {
+          isActive: true,
+        },
+      });
+    }
+
     return this.prisma.organization.findMany({
       where: {
+        id: organizationId,
         isActive: true,
       },
     });
   }
 
-  findOne(id: string) {
-    return this.prisma.organization.findUnique({
-      where: { id, isActive: true },
+  findOne(id: string, organizationId: string, roleType?: string) {
+    if (roleType === 'SUPER_ADMIN') {
+      return this.prisma.organization.findFirst({
+        where: {
+          id,
+          isActive: true,
+        },
+      });
+    }
+
+    if (id !== organizationId) {
+      return null;
+    }
+
+    return this.prisma.organization.findFirst({
+      where: {
+        id,
+        isActive: true,
+      },
     });
   }
 
